@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -45,13 +46,15 @@ func (s *server) handlerShortenLink(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing url parameter", http.StatusBadRequest)
 		return
 	}
-	logger.Println("Shortening URL:", longURL)
+	// logger.Info(fmt.Sprintf("Shortening URL:", longURL))
+	logger.Info("Shortening URL", slog.String("url", longURL))
 	u, err := url.Parse(longURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		http.Error(w, "invalid URL: must include scheme (http/https) and host", http.StatusBadRequest)
 		return
 	}
-	logger.Printf("Parsed URL: scheme=%s, host=%s", u.Scheme, u.Host)
+	// logger.Info(fmt.Sprintf("Parsed URL: scheme=%s, host=%s", u.Scheme, u.Host))
+	logger.Info("Parsed URL", slog.String("scheme", u.Scheme), slog.String("host", u.Host))
 	if err := checkDestination(longURL); err != nil {
 		http.Error(w, fmt.Sprintf("invalid target URL: %v", err), http.StatusBadRequest)
 		return
@@ -61,7 +64,8 @@ func (s *server) handlerShortenLink(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to shorten URL", http.StatusInternalServerError)
 		return
 	}
-	logger.Printf("Generated short code: %s for URL: %s", shortCode, longURL)
+	// logger.Info(fmt.Sprintf("Generated short code: %s for URL: %s", shortCode, longURL))
+	logger.Info("Generated short code for url", slog.String("code", shortCode), slog.String("url", longURL))
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
 	io.WriteString(w, shortCode)
@@ -73,7 +77,8 @@ func (s *server) handlerRedirect(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, store.ErrNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
 		} else {
-			logger.Printf("failed to lookup URL: %v", err)
+			// logger.Info(fmt.Sprintf("failed to lookup URL: %v", err))
+			logger.Info("failed to lookup URL", slog.Any("error", err))
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
 		return
@@ -94,7 +99,8 @@ func (s *server) handlerRedirect(w http.ResponseWriter, r *http.Request) {
 func (s *server) handlerListURLs(w http.ResponseWriter, r *http.Request) {
 	codes, err := s.store.List(r.Context())
 	if err != nil {
-		logger.Printf("failed to list URLs: %v", err)
+		// logger.Info(fmt.Sprintf("failed to list URLs: %v", err))
+		logger.Info("failed ot list urls", slog.Any("error", err))
 		http.Error(w, "failed to list URLs", http.StatusInternalServerError)
 		return
 	}
