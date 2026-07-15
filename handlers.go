@@ -46,15 +46,11 @@ func (s *server) handlerShortenLink(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing url parameter", http.StatusBadRequest)
 		return
 	}
-	// logger.Info(fmt.Sprintf("Shortening URL:", longURL))
-	logger.Info("Shortening URL", slog.String("url", longURL))
 	u, err := url.Parse(longURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		http.Error(w, "invalid URL: must include scheme (http/https) and host", http.StatusBadRequest)
 		return
 	}
-	// logger.Info(fmt.Sprintf("Parsed URL: scheme=%s, host=%s", u.Scheme, u.Host))
-	logger.Info("Parsed URL", slog.String("scheme", u.Scheme), slog.String("host", u.Host))
 	if err := checkDestination(longURL); err != nil {
 		http.Error(w, fmt.Sprintf("invalid target URL: %v", err), http.StatusBadRequest)
 		return
@@ -65,7 +61,7 @@ func (s *server) handlerShortenLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// logger.Info(fmt.Sprintf("Generated short code: %s for URL: %s", shortCode, longURL))
-	logger.Info("Generated short code for url", slog.String("code", shortCode), slog.String("url", longURL))
+	s.logger.Info("Successfully generated short code", slog.String("Shortening URL", shortCode), slog.String("Parsed URL", longURL))
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
 	io.WriteString(w, shortCode)

@@ -78,7 +78,7 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 type closeFunc func() error
 
 func initializeLogger() (*slog.Logger, closeFunc, error) {
-	debugHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
+	debugHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: replaceAttr})
 	logFilePath := os.Getenv("LINKO_LOG_FILE")
 	flushfunc := func() error { return nil }
 	if len(logFilePath) > 0 {
@@ -86,7 +86,7 @@ func initializeLogger() (*slog.Logger, closeFunc, error) {
 		if err != nil {
 			return nil, flushfunc, fmt.Errorf("failed to open log file: %v", err)
 		}
-		infoHandler := slog.NewJSONHandler(logFile, &slog.HandlerOptions{Level: slog.LevelInfo})
+		infoHandler := slog.NewJSONHandler(logFile, &slog.HandlerOptions{Level: slog.LevelInfo, ReplaceAttr: replaceAttr})
 		// multiwriter := bufio.NewWriterSize(io.MultiWriter(os.Stderr, logFile), 8192)
 		flushfunc = func() error {
 			// err := multiwriter.Flush()
@@ -99,8 +99,20 @@ func initializeLogger() (*slog.Logger, closeFunc, error) {
 			// }
 			return nil
 		}
+
 		return slog.New(slog.NewMultiHandler(debugHandler, infoHandler)), flushfunc, nil
 		// return slog.New(slog.NewTextHandler(bufio.NewWriterSize(multiwriter, 8192), nil)), flushfunc, nil
 	}
 	return slog.New(slog.NewTextHandler(os.Stderr, nil)), flushfunc, nil
+}
+
+func replaceAttr(groups []string, a slog.Attr) slog.Attr {
+	if a.Key == "error" {
+		err, ok := a.Value.Any().(error)
+		if !ok {
+			return a
+		}
+		return slog.String("error", fmt.Sprintf("%+v", err))
+	}
+	return a
 }

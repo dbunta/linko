@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	pkgerr "github.com/pkg/errors"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -56,7 +57,7 @@ func (s *server) validatePassword(password, stored string) (bool, error) {
 	if err != nil {
 		// logger.Info(fmt.Sprintf("error validating password: %v", err))
 		// s.logger.Info("error validatin password", slog.Any("error", err))
-		return false, err
+		return false, pkgerr.WithStack(err)
 	}
 	return true, nil
 }
