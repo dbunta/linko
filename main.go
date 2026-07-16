@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -10,8 +11,20 @@ import (
 	"syscall"
 	"time"
 
+	"boot.dev/linko/internal/linkoerr"
 	"boot.dev/linko/internal/store"
+	pkgerr "github.com/pkg/errors"
 )
+
+type stackTracer interface {
+	error
+	StackTrace() pkgerr.StackTrace
+}
+type multiError interface {
+	error
+	Unwrap() []error
+}
+type closeFunc func() error
 
 var logger *slog.Logger
 
@@ -75,8 +88,6 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 	return 0
 }
 
-type closeFunc func() error
-
 func initializeLogger() (*slog.Logger, closeFunc, error) {
 	debugHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: replaceAttr})
 	logFilePath := os.Getenv("LINKO_LOG_FILE")
@@ -112,7 +123,50 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 		if !ok {
 			return a
 		}
-		return slog.String("error", fmt.Sprintf("%+v", err))
+		if multiErr, ok := errors.AsType[multiError](err); ok {
+			errs := multiErr.Unwrap()
+			var attrgroups []slog.Attr
+			for i, e := range errs {
+				attr := linkoerr.Attrs(e)
+				// attr = append(attr, slog.Attr{Key: fmt.Sprintf("%d", i), Value: slog.StringValue(fmt.Sprintf("%+v", e))})
+				attr = append(attr, slog.Attr{
+					Key:   "message",
+					Value: slog.StringValue(e.Error()),
+				})
+				// attr = append(attr, slog.Attr{
+				// 	Key:   "stack_trace",
+				// 	Value: slog.StringValue(fmt.Sprintf("%+v", e.StackTrace())),
+				// })
+				group := slog.Attr{
+					Key:   fmt.Sprintf("error_%d", i+1),
+					Value: slog.AnyValue(attr),
+				}
+				attrgroups = append(attrgroups, group)
+			}
+			return slog.GroupAttrs("errors", attrgroups...)
+		}
+		if stackErr, ok := errors.AsType[stackTracer](err); ok {
+			attr := linkoerr.Attrs(err)
+			attr = append(attr, slog.Attr{
+				Key:   "message",
+				Value: slog.StringValue(stackErr.Error()),
+			})
+			attr = append(attr, slog.Attr{
+				Key:   "stack_trace",
+				Value: slog.StringValue(fmt.Sprintf("%+v", stackErr.StackTrace())),
+			})
+			return slog.GroupAttrs("error", attr...)
+
+			// return slog.GroupAttrs("error", attr...)
+			// return slog.GroupAttrs("error", slog.Attr{
+			// 	Key:   "message",
+			// 	Value: slog.StringValue(stackErr.Error()),
+			// }, slog.Attr{
+			// 	Key:   "stack_trace",
+			// 	Value: slog.StringValue(fmt.Sprintf("%+v", stackErr.StackTrace())),
+			// })
+			// return slog.GroupAttrs("error", attr...)
+		}
 	}
 	return a
 }
